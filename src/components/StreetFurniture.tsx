@@ -34,9 +34,9 @@ function LampInstances({ lamps }: { lamps: LampData[] }) {
 
   if (!lamps.length) return null;
 
-  // Only render point lights for a subset (performance)
+  // Only render point lights for a small subset (performance — each light is expensive)
   const litLamps = useMemo(() => {
-    const step = Math.max(1, Math.floor(lamps.length / 80));
+    const step = Math.max(1, Math.floor(lamps.length / 20));
     return lamps.filter((_, i) => i % step === 0);
   }, [lamps]);
 

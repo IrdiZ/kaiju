@@ -38,11 +38,12 @@ export default function FlyCamera() {
     (window as any).__flyCamera = { yaw, pitch, baseSpeed, cinematic, velocity };
   }, []);
 
-  // Initial position
+  // Initial position — Markt square, Maastricht
   useEffect(() => {
-    camera.position.set(0, 80, 200);
-    camera.lookAt(0, 0, 0);
-    const dir = new THREE.Vector3(0, 0, 0).sub(camera.position).normalize();
+    // Markt center is at approximately x=150, z=-360 in game coords
+    camera.position.set(150, 15, -320);
+    camera.lookAt(150, 10, -380);
+    const dir = new THREE.Vector3(150, 10, -380).sub(camera.position).normalize();
     yaw.current = Math.atan2(-dir.x, -dir.z);
     pitch.current = Math.asin(dir.y);
   }, [camera]);

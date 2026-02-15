@@ -200,6 +200,8 @@ export function getMaterialLibrary(): MaterialLibrary {
 export function getMaterial(style: string): THREE.MeshStandardMaterial {
   const lib = getMaterialLibrary();
   const mats = (lib as Record<string, THREE.MeshStandardMaterial | THREE.MeshStandardMaterial[]>)[style] || lib.residential;
-  if (Array.isArray(mats)) return mats[Math.floor(Math.random() * mats.length)];
-  return mats as THREE.MeshStandardMaterial;
+  const mat = Array.isArray(mats) ? mats[Math.floor(Math.random() * mats.length)] : mats as THREE.MeshStandardMaterial;
+  // DoubleSide ensures walls are visible regardless of polygon winding
+  mat.side = THREE.DoubleSide;
+  return mat;
 }

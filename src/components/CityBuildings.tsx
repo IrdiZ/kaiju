@@ -66,11 +66,13 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
 
       let geo: THREE.BufferGeometry;
       try {
+        // Reverse polygon order to preserve correct face winding after
+        // using raw Z coords. After rotateX(-PI/2): new_z = -shape_y = -rawZ
+        // which matches the game coordinate convention.
+        const pts = [...poly].reverse();
         const shape = new THREE.Shape();
-        // Use raw poly coords — after rotateX(-PI/2), new_z = -shape_y = -poly[1]
-        // which matches gamePoly convention (Z = -rawZ)
-        shape.moveTo(poly[0][0], poly[0][1]);
-        for (let j = 1; j < poly.length; j++) shape.lineTo(poly[j][0], poly[j][1]);
+        shape.moveTo(pts[0][0], pts[0][1]);
+        for (let j = 1; j < pts.length; j++) shape.lineTo(pts[j][0], pts[j][1]);
         shape.closePath();
 
         const extGeo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
@@ -259,9 +261,10 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
 
       // Flat roof cap
       try {
+        const rpts = [...b.data.p].reverse();
         const rs = new THREE.Shape();
-        rs.moveTo(b.data.p[0][0], b.data.p[0][1]);
-        for (let j = 1; j < b.data.p.length; j++) rs.lineTo(b.data.p[j][0], b.data.p[j][1]);
+        rs.moveTo(rpts[0][0], rpts[0][1]);
+        for (let j = 1; j < rpts.length; j++) rs.lineTo(rpts[j][0], rpts[j][1]);
         rs.closePath();
         const rg = new THREE.ExtrudeGeometry(rs, { depth: 0.5, bevelEnabled: false });
         rg.rotateX(-Math.PI / 2);

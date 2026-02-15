@@ -1,25 +1,40 @@
 import { useMemo } from 'react';
 import * as THREE from 'three';
 import type { RoadData } from '../types/data';
-import { createAsphaltTexture, createCobbleTexture, createPavingTexture } from '../textures/procedural';
 
 interface RoadsProps {
   roads: RoadData[];
 }
 
-export function Roads({ roads }: RoadsProps) {
-  const { geometries, materials } = useMemo(() => {
-    const asphaltTex = createAsphaltTexture();
-    const cobbleTex = createCobbleTexture();
-    const pavingTex = createPavingTexture();
+function loadPBR(basePath: string, prefix: string, rx: number, ry: number, hasAO = false) {
+  const loader = new THREE.TextureLoader();
+  const load = (suffix: string, srgb = false) => {
+    const tex = loader.load(`${basePath}/${prefix}${suffix}`);
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(rx, ry);
+    if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  };
 
+  const opts: any = {
+    map: load('_Color.jpg', true),
+    normalMap: load('_NormalGL.jpg'),
+    roughnessMap: load('_Roughness.jpg'),
+    roughness: 1,
+    metalness: 0.02,
+  };
+  if (hasAO) opts.aoMap = load('_AmbientOcclusion.jpg');
+  return new THREE.MeshStandardMaterial(opts);
+}
+
+export function Roads({ roads }: RoadsProps) {
+  const { geometries } = useMemo(() => {
     const mats: Record<string, THREE.MeshStandardMaterial> = {
-      asphalt: new THREE.MeshStandardMaterial({ map: asphaltTex, roughness: 0.85, metalness: 0.05 }),
-      cobble: new THREE.MeshStandardMaterial({ map: cobbleTex, roughness: 0.9, metalness: 0.02 }),
-      paving: new THREE.MeshStandardMaterial({ map: pavingTex, roughness: 0.85, metalness: 0.03 }),
+      asphalt: loadPBR('/textures/asphalt', 'Asphalt012_1K-JPG', 1, 1, false),
+      cobble: loadPBR('/textures/cobble', 'PavingStones130_1K-JPG', 1, 1, true),
+      paving: loadPBR('/textures/paving', 'PavingStones074_1K-JPG', 1, 1, true),
     };
 
-    // Merge all road segments into per-material merged geometries
     const geosByMat: Record<string, THREE.BufferGeometry[]> = { asphalt: [], cobble: [], paving: [] };
 
     for (const road of roads) {
@@ -53,20 +68,16 @@ export function Roads({ roads }: RoadsProps) {
       }
     }
 
-    // Merge geometries per material
     const merged: { geo: THREE.BufferGeometry; mat: THREE.MeshStandardMaterial }[] = [];
     for (const key of Object.keys(geosByMat)) {
       const geos = geosByMat[key];
       if (geos.length === 0) continue;
       const mergedGeo = mergeBufferGeometries(geos);
-      if (mergedGeo) {
-        merged.push({ geo: mergedGeo, mat: mats[key] });
-      }
-      // Dispose individual geometries
+      if (mergedGeo) merged.push({ geo: mergedGeo, mat: mats[key] });
       for (const g of geos) g.dispose();
     }
 
-    return { geometries: merged, materials: mats };
+    return { geometries: merged };
   }, [roads]);
 
   return (
@@ -78,7 +89,6 @@ export function Roads({ roads }: RoadsProps) {
   );
 }
 
-// Simple merge utility
 function mergeBufferGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   if (geometries.length === 0) return null;
 
@@ -94,7 +104,6 @@ function mergeBufferGeometries(geometries: THREE.BufferGeometry[]): THREE.Buffer
   const normals = new Float32Array(totalVerts * 3);
   const indices = new Uint32Array(totalIndices);
 
-  let vertOffset = 0;
   let idxOffset = 0;
   let vertCount = 0;
 

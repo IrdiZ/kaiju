@@ -110,7 +110,7 @@ export function Water() {
 
   // Load water geometry
   useEffect(() => {
-    fetch('/water.json')
+    fetch('/water-markt.json')
       .then((r) => r.json())
       .then((data: WaterData) => setWaterData(data))
       .catch(() => {

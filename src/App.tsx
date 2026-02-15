@@ -64,7 +64,7 @@ function Scene({ buildings, cityData, vegData, furnitureData }: {
 }) {
   return (
     <>
-      <fogExp2 attach="fog" args={[0xc8d8e8, 0.0004]} />
+      <fogExp2 attach="fog" args={[0xc8d8e8, 0.0015]} />
 
       <Suspense fallback={null}>
         <AtmosphericSky />
@@ -101,8 +101,8 @@ export default function App() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/data.json').then(r => r.json()),
-      fetch('/vegetation.json').then(r => r.json()).catch(() => null),
+      fetch('/data-markt.json').then(r => r.json()),
+      fetch('/vegetation-markt.json').then(r => r.json()).catch(() => null),
     ]).then(([city, veg]) => {
       setCityData(city);
       if (veg) {
@@ -137,7 +137,7 @@ export default function App() {
       `}</style>
       <Canvas
         shadows
-        camera={{ fov: 65, near: 0.5, far: 5000 }}
+        camera={{ fov: 65, near: 0.5, far: 1500 }}
         gl={{
           antialias: true,
           powerPreference: 'high-performance',

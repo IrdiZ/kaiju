@@ -1,0 +1,9 @@
+{
+  "bbox_rd": [175700, 317700, 176300, 318300],
+  "center_rd": [176000, 318000],
+  "width_meters": 600,
+  "height_meters": 600,
+  "image_width": 4096,
+  "image_height": 4096,
+  "pixels_per_meter": 6.827
+}

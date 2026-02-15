@@ -18,7 +18,7 @@ export default function Terrain() {
 
   // Load terrain heightmap
   useEffect(() => {
-    fetch('/terrain.json')
+    fetch('/terrain-markt.json')
       .then(r => r.json())
       .then(data => setTerrainData(data))
       .catch(() => console.warn('No terrain.json found'));
@@ -27,7 +27,7 @@ export default function Terrain() {
   // Load aerial texture
   useEffect(() => {
     const loader = new THREE.TextureLoader();
-    loader.load('/textures/aerial/maastricht-ortho.jpg', tex => {
+    loader.load('/textures/aerial/markt-ortho.jpg', tex => {
       tex.colorSpace = THREE.SRGBColorSpace;
       tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
       tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -64,7 +64,7 @@ export default function Terrain() {
     // Fallback flat ground with aerial or grass
     return (
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
-        <planeGeometry args={[3000, 3000]} />
+        <planeGeometry args={[600, 600]} />
         {aerialTex ? (
           <meshStandardMaterial map={aerialTex} roughness={0.95} metalness={0} />
         ) : (

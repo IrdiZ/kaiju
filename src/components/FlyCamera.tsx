@@ -5,10 +5,10 @@ import * as THREE from 'three';
 const DEG85 = (85 * Math.PI) / 180;
 const LERP = 0.1;
 const SENSITIVITY = 0.002;
-const ORBIT_RADIUS = 300;
-const ORBIT_SPEED = 0.05;
-const ORBIT_ALT = 200;
-const ORBIT_ALT_VAR = 30;
+const ORBIT_RADIUS = 150;
+const ORBIT_SPEED = 0.06;
+const ORBIT_ALT = 80;
+const ORBIT_ALT_VAR = 15;
 
 interface InputState {
   forward: boolean;
@@ -28,7 +28,7 @@ export default function FlyCamera() {
   const yaw = useRef(0);
   const pitch = useRef(0);
   const locked = useRef(false);
-  const baseSpeed = useRef(30);
+  const baseSpeed = useRef(12);
   const cinematic = useRef(false);
   const cinematicT = useRef(0);
   const cinematicBlend = useRef(0);
@@ -40,10 +40,10 @@ export default function FlyCamera() {
 
   // Initial position — Markt square, Maastricht
   useEffect(() => {
-    // Markt center is at approximately x=150, z=-360 in game coords
-    camera.position.set(150, 15, -320);
-    camera.lookAt(150, 10, -380);
-    const dir = new THREE.Vector3(150, 10, -380).sub(camera.position).normalize();
+    // Markt center: stand at street level looking across the square
+    camera.position.set(40, 8, 10);
+    camera.lookAt(-20, 5, -40);
+    const dir = new THREE.Vector3(-20, 5, -40).sub(camera.position).normalize();
     yaw.current = Math.atan2(-dir.x, -dir.z);
     pitch.current = Math.asin(dir.y);
   }, [camera]);
@@ -56,7 +56,7 @@ export default function FlyCamera() {
   }, []);
 
   const onWheel = useCallback((e: WheelEvent) => {
-    baseSpeed.current = Math.max(5, Math.min(200, baseSpeed.current - e.deltaY * 0.05));
+    baseSpeed.current = Math.max(3, Math.min(80, baseSpeed.current - e.deltaY * 0.03));
   }, []);
 
   const keyMap: Record<string, keyof InputState> = { w: 'forward', s: 'backward', a: 'left', d: 'right', q: 'down', e: 'up' };

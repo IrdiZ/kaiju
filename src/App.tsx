@@ -64,7 +64,7 @@ function Scene({ buildings, cityData, vegData, furnitureData }: {
 }) {
   return (
     <>
-      <fogExp2 attach="fog" args={[0xc8d8e8, 0.00035]} />
+      <fogExp2 attach="fog" args={[0xc8d8e8, 0.0004]} />
 
       <Suspense fallback={null}>
         <AtmosphericSky />

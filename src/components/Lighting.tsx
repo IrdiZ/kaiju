@@ -1,6 +1,6 @@
 import { useRef, useMemo } from 'react'
 import { useThree } from '@react-three/fiber'
-import { ContactShadows } from '@react-three/drei'
+// ContactShadows removed for performance
 import * as THREE from 'three'
 
 /**
@@ -43,8 +43,8 @@ export function Lighting() {
         color="#ffeedd"
         intensity={2.5}
         castShadow
-        shadow-mapSize-width={4096}
-        shadow-mapSize-height={4096}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
         shadow-camera-near={0.5}
         shadow-camera-far={500}
         shadow-camera-left={-150}
@@ -73,16 +73,7 @@ export function Lighting() {
         castShadow={false}
       />
 
-      {/* Contact shadows for grounded objects */}
-      <ContactShadows
-        position={[0, 0.01, 0]}
-        opacity={0.5}
-        scale={200}
-        blur={2}
-        far={50}
-        resolution={1024}
-        color="#1a1a2e"
-      />
+      {/* Contact shadows removed for performance */}
     </>
   )
 }

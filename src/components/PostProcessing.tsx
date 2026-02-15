@@ -29,18 +29,14 @@ export function PostProcessing() {
         mipmapBlur
       />
 
-      {/* SSAO for realistic corner/crevice shadows */}
+      {/* SSAO — reduced samples for performance */}
       <SSAO
-        intensity={20}
-        radius={0.05}
+        intensity={15}
+        radius={0.04}
         luminanceInfluence={0.5}
         bias={0.025}
-        samples={21}
-        rings={4}
-        worldDistanceThreshold={1.0}
-        worldDistanceFalloff={0.5}
-        worldProximityThreshold={0.5}
-        worldProximityFalloff={0.3}
+        samples={11}
+        rings={3}
       />
 
       {/* Subtle vignette for photo-like framing */}

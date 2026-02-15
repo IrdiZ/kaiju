@@ -9,13 +9,9 @@ interface CityBuildingsProps {
 }
 
 /**
- * Focused Markt renderer — every building gets full detail:
- * - Real polygon extrusion (actual footprint shapes)
- * - Windows on every floor
- * - Cornices at roofline + mid-height
- * - Hip roofs on residential buildings
- * - Spires + rose windows on churches
- * All merged into batched geometries for performance.
+ * Focused Markt renderer — manual wall quads (no ExtrudeGeometry).
+ * Every building gets: real polygon walls, windows, cornices, hip roofs.
+ * All geometry uses game convention: Z = -rawZ.
  */
 export default function CityBuildings({ buildings }: CityBuildingsProps) {
   const { scene } = useThree();
@@ -31,102 +27,60 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
 
     // Detail materials
     const windowMat = new THREE.MeshStandardMaterial({
-      color: 0x2a4a6a, roughness: 0.1, metalness: 0.5, transparent: true, opacity: 0.8,
+      color: 0x2a4a6a, roughness: 0.1, metalness: 0.5,
+      transparent: true, opacity: 0.8, side: THREE.DoubleSide,
     });
     const windowLitMat = new THREE.MeshStandardMaterial({
       color: 0xffe8a0, roughness: 0.3, metalness: 0.1,
       emissive: new THREE.Color(0x443300), emissiveIntensity: 0.3,
+      side: THREE.DoubleSide,
     });
     const windowFrameMat = new THREE.MeshStandardMaterial({
       color: 0xf0ece0, roughness: 0.6, metalness: 0.05,
+      side: THREE.DoubleSide,
     });
     const corniceMat = new THREE.MeshStandardMaterial({
       color: 0xe8e0d0, roughness: 0.5, metalness: 0.08,
     });
 
-    const churches = buildings.filter(
-      b => b.style === 'church' || b.style === 'basilica' || b.data.l === 'church' || b.data.l === 'basilica'
-    );
-    const nonChurches = buildings.filter(
-      b => b.style !== 'church' && b.style !== 'basilica' && b.data.l !== 'church' && b.data.l !== 'basilica'
-    );
+    const isChurch = (b: BuildingState) =>
+      b.style === 'church' || b.style === 'basilica' ||
+      b.data.l === 'church' || b.data.l === 'basilica';
+
+    const churches = buildings.filter(isChurch);
+    const nonChurches = buildings.filter(b => !isChurch(b));
 
     // ==========================================
-    // 1. BUILDING BODIES — polygon extrusion, merged per style
+    // 1. BUILDING WALLS — manual quads, merged per style
     // ==========================================
-    const styleGroups: Record<string, THREE.BufferGeometry[]> = {};
+    const styleWalls: Record<string, THREE.BufferGeometry[]> = {};
 
     for (const b of buildings) {
       const poly = b.data.p;
       const h = b.height;
       const styleKey =
-        b.style === 'church' || b.style === 'basilica' ? 'church' :
+        isChurch(b) ? 'church' :
         b.style === 'modern' ? 'modern' :
         b.style === 'commercial' ? 'commercial' : 'residential';
 
-      let geo: THREE.BufferGeometry;
-      try {
-        // Reverse polygon order to preserve correct face winding after
-        // using raw Z coords. After rotateX(-PI/2): new_z = -shape_y = -rawZ
-        // which matches the game coordinate convention.
-        const pts = [...poly].reverse();
-        const shape = new THREE.Shape();
-        shape.moveTo(pts[0][0], pts[0][1]);
-        for (let j = 1; j < pts.length; j++) shape.lineTo(pts[j][0], pts[j][1]);
-        shape.closePath();
-
-        const extGeo = new THREE.ExtrudeGeometry(shape, { depth: h, bevelEnabled: false });
-        extGeo.rotateX(-Math.PI / 2);
-
-        // UV mapping: world-space projection for proper texture tiling
-        const posA = extGeo.getAttribute('position');
-        const uvA = extGeo.getAttribute('uv');
-        if (uvA) {
-          for (let j = 0; j < posA.count; j++) {
-            (uvA as THREE.BufferAttribute).setXY(
-              j,
-              (posA.getX(j) + posA.getZ(j)) * 0.05,
-              posA.getY(j) * 0.05,
-            );
-          }
-        }
-        geo = extGeo;
-      } catch {
-        // Fallback box for degenerate polygons
-        const bw = Math.max(2, b.bbox.w), bd = Math.max(2, b.bbox.d);
-        const box = new THREE.BoxGeometry(bw, h, bd);
-        box.translate((b.bbox.minX + b.bbox.maxX) / 2, h / 2, -(b.bbox.minZ + b.bbox.maxZ) / 2);
-        geo = box;
-      }
-
-      if (!styleGroups[styleKey]) styleGroups[styleKey] = [];
-      styleGroups[styleKey].push(geo);
+      const geo = createWallGeo(poly, h);
+      if (!styleWalls[styleKey]) styleWalls[styleKey] = [];
+      styleWalls[styleKey].push(geo);
     }
 
-    for (const [style, geos] of Object.entries(styleGroups)) {
-      for (let ci = 0; ci < geos.length; ci += 200) {
-        const chunk = geos.slice(ci, ci + 200);
-        const merged = mergeGeometries(chunk);
-        if (merged) {
-          const mesh = new THREE.Mesh(merged, getMaterial(style));
-          mesh.castShadow = true;
-          mesh.receiveShadow = true;
-          scene.add(mesh);
-          allMeshes.push(mesh);
-        }
-        for (const g of chunk) g.dispose();
-      }
+    for (const [style, geos] of Object.entries(styleWalls)) {
+      batchMergeAdd(geos, getMaterial(style), scene, allMeshes, true);
     }
 
     // ==========================================
-    // 2. WINDOWS — on ALL buildings, merged
+    // 2. WINDOWS — on all buildings, merged
     // ==========================================
     const windowDarkGeos: THREE.BufferGeometry[] = [];
     const windowLitGeos: THREE.BufferGeometry[] = [];
     const frameGeos: THREE.BufferGeometry[] = [];
 
     for (const b of buildings) {
-      const gamePoly = b.data.p.map(p => [p[0], -p[1]]);
+      const gamePoly = b.data.p.map(p => [p[0], -p[1]] as [number, number]);
       const h = b.height;
       const floorH = 3.2;
       const numFloors = Math.max(1, Math.floor(h / floorH));
@@ -151,19 +105,14 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
             const wy = fl * floorH + floorH * 0.55;
             if (wy + 0.8 > h - 0.5) continue;
 
-            // Frame
             const fg = new THREE.PlaneGeometry(1.5, 1.9);
-            applyPlaneTransform(fg, wx + nx * 0.02, wy, wz + nz * 0.02, angle);
+            applyPlaneXform(fg, wx + nx * 0.02, wy, wz + nz * 0.02, angle);
             frameGeos.push(fg);
 
-            // Glass pane
             const wg = new THREE.PlaneGeometry(1.2, 1.6);
-            applyPlaneTransform(wg, wx + nx * 0.05, wy, wz + nz * 0.05, angle);
-            if (Math.random() > 0.65) {
-              windowLitGeos.push(wg);
-            } else {
-              windowDarkGeos.push(wg);
-            }
+            applyPlaneXform(wg, wx + nx * 0.05, wy, wz + nz * 0.05, angle);
+            if (Math.random() > 0.65) windowLitGeos.push(wg);
+            else windowDarkGeos.push(wg);
           }
         }
       }
@@ -174,12 +123,12 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
     batchMergeAdd(windowLitGeos, windowLitMat, scene, allMeshes, false);
 
     // ==========================================
-    // 3. CORNICES — at roofline + mid-height, merged
+    // 3. CORNICES — roofline + mid-height, merged
     // ==========================================
     const corniceGeos: THREE.BufferGeometry[] = [];
 
     for (const b of buildings) {
-      const gamePoly = b.data.p.map(p => [p[0], -p[1]]);
+      const gamePoly = b.data.p.map(p => [p[0], -p[1]] as [number, number]);
       const h = b.height;
       const levels = [h];
       if (h > 8) levels.push(h * 0.5);
@@ -193,7 +142,7 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
 
           const nx = -dz / wallLen, nz = dx / wallLen;
           const cg = new THREE.BoxGeometry(wallLen, 0.25, 0.3);
-          const mat4 = new THREE.Matrix4().compose(
+          cg.applyMatrix4(new THREE.Matrix4().compose(
             new THREE.Vector3(
               (p1[0] + p2[0]) / 2 + nx * 0.15,
               lv,
@@ -201,8 +150,7 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
             ),
             new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.atan2(dx, dz), 0)),
             new THREE.Vector3(1, 1, 1),
-          );
-          cg.applyMatrix4(mat4);
+          ));
           corniceGeos.push(cg);
         }
       }
@@ -211,20 +159,17 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
     batchMergeAdd(corniceGeos, corniceMat, scene, allMeshes, true);
 
     // ==========================================
-    // 4. HIP ROOFS — on non-church buildings, merged
+    // 4. HIP ROOFS — non-church buildings, merged
     // ==========================================
     const roofGeos: THREE.BufferGeometry[] = [];
 
     for (const b of nonChurches) {
-      const gamePoly = b.data.p.map(p => [p[0], -p[1]]);
+      const gamePoly = b.data.p.map(p => [p[0], -p[1]] as [number, number]);
       const h = b.height;
       const cx = b.centroid[0], cz = b.centroid[1];
-
-      // Roof pitch: scales with building width, capped
       const minDim = Math.min(b.bbox.w, b.bbox.d);
       const roofH = Math.min(4, Math.max(1.5, minDim * 0.35));
 
-      // Hip roof: one triangle per polygon edge → centroid peak
       for (let pi = 0; pi < gamePoly.length; pi++) {
         const p1 = gamePoly[pi];
         const p2 = gamePoly[(pi + 1) % gamePoly.length];
@@ -247,7 +192,7 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
     batchMergeAdd(roofGeos, lib.roof, scene, allMeshes, true);
 
     // ==========================================
-    // 5. CHURCH SPECIALS — spires, crosses, rose windows
+    // 5. CHURCH FEATURES — spires, crosses, rose windows
     // ==========================================
     const crossMat = new THREE.MeshStandardMaterial({ color: 0xddcc88, metalness: 0.7, roughness: 0.3 });
     const roseMat = new THREE.MeshStandardMaterial({
@@ -257,44 +202,44 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
 
     for (const b of churches) {
       const h = b.height;
-      const gamePoly = b.data.p.map(p => [p[0], -p[1]]);
+      const gamePoly = b.data.p.map(p => [p[0], -p[1]] as [number, number]);
+      const cx = b.centroid[0], cz = b.centroid[1];
 
       // Flat roof cap
-      try {
-        const rpts = [...b.data.p].reverse();
-        const rs = new THREE.Shape();
-        rs.moveTo(rpts[0][0], rpts[0][1]);
-        for (let j = 1; j < rpts.length; j++) rs.lineTo(rpts[j][0], rpts[j][1]);
-        rs.closePath();
-        const rg = new THREE.ExtrudeGeometry(rs, { depth: 0.5, bevelEnabled: false });
-        rg.rotateX(-Math.PI / 2);
-        const rm = new THREE.Mesh(rg, lib.roofChurch);
-        rm.position.y = h;
-        rm.castShadow = true;
-        scene.add(rm);
-        allMeshes.push(rm);
-      } catch { /* skip */ }
+      const capGeos: THREE.BufferGeometry[] = [];
+      for (let i = 1; i < gamePoly.length - 1; i++) {
+        const v = new Float32Array([
+          gamePoly[0][0], h, gamePoly[0][1],
+          gamePoly[i][0], h, gamePoly[i][1],
+          gamePoly[i + 1][0], h, gamePoly[i + 1][1],
+        ]);
+        const rg = new THREE.BufferGeometry();
+        rg.setAttribute('position', new THREE.BufferAttribute(v, 3));
+        rg.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 1, 0, 0.5, 1]), 2));
+        rg.setIndex([0, 1, 2]);
+        rg.computeVertexNormals();
+        capGeos.push(rg);
+      }
+      batchMergeAdd(capGeos, lib.roofChurch, scene, allMeshes, true);
 
       // Spire
       const spH = 15 + Math.random() * 15;
       const spR = Math.min(b.radius * 0.3, 3);
       const spire = new THREE.Mesh(new THREE.ConeGeometry(spR, spH, 6), lib.roofChurch);
-      spire.position.set(b.centroid[0], h + spH / 2, b.centroid[1]);
+      spire.position.set(cx, h + spH / 2, cz);
       spire.castShadow = true;
       scene.add(spire);
       allMeshes.push(spire);
 
       // Cross
       const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3, 0.3), crossMat);
-      crossV.position.set(b.centroid[0], h + spH + 1.5, b.centroid[1]);
-      scene.add(crossV);
-      allMeshes.push(crossV);
+      crossV.position.set(cx, h + spH + 1.5, cz);
+      scene.add(crossV); allMeshes.push(crossV);
       const crossH = new THREE.Mesh(new THREE.BoxGeometry(2, 0.3, 0.3), crossMat);
-      crossH.position.set(b.centroid[0], h + spH + 2, b.centroid[1]);
-      scene.add(crossH);
-      allMeshes.push(crossH);
+      crossH.position.set(cx, h + spH + 2, cz);
+      scene.add(crossH); allMeshes.push(crossH);
 
-      // Rose window on longest wall face
+      // Rose window on longest wall
       if (gamePoly.length >= 2) {
         let bestLen = 0, bestIdx = 0;
         for (let pi = 0; pi < gamePoly.length; pi++) {
@@ -310,8 +255,7 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
         const rose = new THREE.Mesh(new THREE.CircleGeometry(1.5, 12), roseMat);
         rose.position.set(mx + nx * 0.1, h * 0.75, mz + nz * 0.1);
         rose.rotation.y = Math.atan2(nx, nz);
-        scene.add(rose);
-        allMeshes.push(rose);
+        scene.add(rose); allMeshes.push(rose);
       }
     }
 
@@ -328,20 +272,70 @@ export default function CityBuildings({ buildings }: CityBuildingsProps) {
   return null;
 }
 
-/* ── helpers ──────────────────────────────────────── */
+/* ── Manual wall geometry ────────────────────── */
 
-/** Position + Y-rotate a plane geometry in place */
-function applyPlaneTransform(geo: THREE.BufferGeometry, x: number, y: number, z: number, rotY: number) {
-  geo.applyMatrix4(
-    new THREE.Matrix4().compose(
-      new THREE.Vector3(x, y, z),
-      new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)),
-      new THREE.Vector3(1, 1, 1),
-    ),
-  );
+/** Create wall quads from polygon edges. All in game coords (Z = -rawZ). */
+function createWallGeo(poly: number[][], h: number): THREE.BufferGeometry {
+  const verts: number[] = [];
+  const norms: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  let vi = 0;
+
+  for (let i = 0; i < poly.length; i++) {
+    const p1 = poly[i], p2 = poly[(i + 1) % poly.length];
+    // Game convention: Z = -rawZ
+    const x1 = p1[0], z1 = -p1[1];
+    const x2 = p2[0], z2 = -p2[1];
+    const dx = x2 - x1, dz = z2 - z1;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    if (len < 0.01) continue;
+
+    // Outward-facing normal
+    const nx = -dz / len, nz = dx / len;
+
+    // Quad: bottom-left → bottom-right → top-right → top-left
+    verts.push(
+      x1, 0, z1,
+      x2, 0, z2,
+      x2, h, z2,
+      x1, h, z1,
+    );
+    norms.push(
+      nx, 0, nz,
+      nx, 0, nz,
+      nx, 0, nz,
+      nx, 0, nz,
+    );
+    uvs.push(
+      0, 0,
+      len * 0.05, 0,
+      len * 0.05, h * 0.05,
+      0, h * 0.05,
+    );
+    // CCW winding (front face)
+    indices.push(vi, vi + 1, vi + 2, vi, vi + 2, vi + 3);
+    vi += 4;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(norms, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  return geo;
 }
 
-/** Merge geometries in chunks of 500, add each batch as a mesh */
+/* ── Helpers ─────────────────────────────────── */
+
+function applyPlaneXform(geo: THREE.BufferGeometry, x: number, y: number, z: number, rotY: number) {
+  geo.applyMatrix4(new THREE.Matrix4().compose(
+    new THREE.Vector3(x, y, z),
+    new THREE.Quaternion().setFromEuler(new THREE.Euler(0, rotY, 0)),
+    new THREE.Vector3(1, 1, 1),
+  ));
+}
+
 function batchMergeAdd(
   geos: THREE.BufferGeometry[],
   mat: THREE.Material,
@@ -352,7 +346,7 @@ function batchMergeAdd(
   const CHUNK = 500;
   for (let ci = 0; ci < geos.length; ci += CHUNK) {
     const chunk = geos.slice(ci, ci + CHUNK);
-    const merged = mergeGeometries(chunk);
+    const merged = mergeGeos(chunk);
     if (merged) {
       const mesh = new THREE.Mesh(merged, mat);
       if (castShadow) mesh.castShadow = true;
@@ -364,8 +358,7 @@ function batchMergeAdd(
   }
 }
 
-/** Fast merge (position + normal + uv + index) */
-function mergeGeometries(geos: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
+function mergeGeos(geos: THREE.BufferGeometry[]): THREE.BufferGeometry | null {
   if (geos.length === 0) return null;
   let totalV = 0, totalI = 0;
   for (const g of geos) {

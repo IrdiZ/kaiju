@@ -1,0 +1,11 @@
+{
+  "bbox_rd": [174500, 316500, 177500, 319500],
+  "bbox_wgs84": [5.67, 50.84, 5.71, 50.86],
+  "center_rd": [176000, 318000],
+  "center_wgs84": [5.6889, 50.8483],
+  "width_meters": 3000,
+  "height_meters": 3000,
+  "image_width": 4096,
+  "image_height": 4096,
+  "pixels_per_meter": 1.365
+}
